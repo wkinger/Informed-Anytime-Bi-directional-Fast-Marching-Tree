@@ -39,6 +39,7 @@ namespace ompl
            ompl::base::Planner::declareParam<bool>("extended_fmt", this, &BFMT::setExtendedFMT, &BFMT::getExtendedFMT,
                                                    "0,1");
            ompl::base::Planner::declareParam<double>("batchfactor", this, &BFMT::setBatchFactor, &BFMT::getBatchFactor, "0.1:0.05:50.");
+            ompl::base::Planner::declareParam<unsigned int>("terminatetime", this, &BFMT::setTerminatetime, &BFMT::getTerminatetime, "1:1:500");
            addPlannerProgressProperty("best cost REAL", [this] { return std::to_string(lastCost().value()); });
            addPlannerProgressProperty("iterations INTEGER", [this] { return std::to_string(numIterations()); });
            addPlannerProgressProperty("sample count INTEGER", [this]
@@ -60,6 +61,10 @@ namespace ompl
            addPlannerProgressProperty("validsample INTEGER", [this]
                                       {
                                           return std::to_string(validsample());
+                                      });
+           addPlannerProgressProperty("iteration cost REAL", [this]
+                                      {
+                                          return std::to_string(iterationCost().value());
                                       });
        }
 
@@ -142,6 +147,7 @@ namespace ompl
            Open_elements[REV].clear();
            neighborhoods_.clear();
            lastCost_ = base::Cost(std::numeric_limits<double>::quiet_NaN());
+           iterationcost_ = base::Cost(std::numeric_limits<double>::quiet_NaN());
            collisionChecks_ = 0;
            iterations_ = 0;
            sampleCount_ = 0;
@@ -952,6 +958,7 @@ namespace ompl
                        firstSuccessful_ = true;
                        traceSolutionPathThroughTree(connection_point);
                        OMPL_DEBUG("first path cost: %f", lastCost_.value());
+                       iterationcost_ = lastCost_;
                        ++iterTimes_;
 //                       drawPathe();//绘制最终路径modify
                    }
@@ -977,6 +984,10 @@ namespace ompl
 
             else
             {
+                if (iterTimes_== terminatetime_)
+                {
+                    break;
+                }
 //                std::cout<< "the "<<in <<" times improving planning begin " << std:: endl;
                 Open_[FWD].clear();
                 Open_[REV].clear();
@@ -1054,7 +1065,7 @@ namespace ompl
                     sampler_.reset();
                 sampleFree(nn_,ptc);
                 improvN = improvN*(increaseFactor+1);
-                OMPL_INFORM("%s: Improving planning with %u states already in datastructure", getName().c_str(), nn_->size());
+                OMPL_INFORM("Improving planning with %u states already in datastructure", nn_->size());
                 // Calculate the nearest neighbor search radius
                 if (nearestK_)
                 {
@@ -1123,7 +1134,7 @@ namespace ompl
 //                            traceSolutionPathThroughTree(connection_point);
 //                            drawPathe();
 //                        lastCost=opt_->combineCosts(connection_point->cost_[FWD],connection_point->cost_[REV]);
-                        OMPL_DEBUG("improving path cost: %f", lastCost_.value());
+                        OMPL_DEBUG("%u th search find improving path cost: %f", iterTimes_,lastCost_.value());
 
                         if (sufficientlyShort)
                         {
@@ -1137,7 +1148,8 @@ namespace ompl
                         firstSuccessful_ = true;
                         improvesucess = true;
                         traceSolutionPathThroughTree(connection_point);
-                        OMPL_DEBUG("improving path cost: %f", lastCost_.value());
+                        iterationcost_ = lastCost_;
+                        OMPL_DEBUG("%u th search find improving path cost: %f", iterTimes_,lastCost_.value());
 //                        drawPathe();//绘制最终路径modify
                         in = in + 1;
                     }

@@ -112,6 +112,10 @@ namespace ompl
             {
                 numSamples_ = numSamples;
             }
+            void setTerminatetime(const unsigned int terminatetime)
+            {
+                terminatetime_ = terminatetime;
+            }
             /** \brief Set the number of states that the planner should sample.
                 The planner will sample this number of states in addition to the
                 initial states. If any of the goal states are not reachable from
@@ -126,6 +130,10 @@ namespace ompl
             unsigned int getNumSamples() const
             {
                 return numSamples_;
+            }
+            unsigned int getTerminatetime() const
+            {
+                return terminatetime_;
             }
 
             /** \brief Set batch sampling factor. */
@@ -234,6 +242,11 @@ namespace ompl
             {
                 return bestCost_;
             }
+            ompl::base::Cost iterationCost() const
+            {
+                return iterationcost_;
+            }
+
 
             unsigned int numIterations() const
             {
@@ -491,7 +504,9 @@ namespace ompl
             std::map<Motion *, std::vector<Motion *>> neighborhoods_;
 
             /** \brief The number of samples to use when planning */
-            unsigned int numSamples_{2000u};
+            unsigned int numSamples_{1000u};
+            /** \brief Number of iterations*/
+            unsigned int terminatetime_{5u};
 
             /** \brief The number of batch samples to use when planning */
             unsigned int batchnumSamples_{1000u};//
@@ -561,8 +576,11 @@ namespace ompl
             unsigned int extendCount_{0u};
             /** \brief Number of iteration times the extendFMT* performed */
             unsigned int iterTimes_{0u};
-            /** \brief Number of iteration times the extendFMT* performed */
+            /** \brief Number of valid samples */
             unsigned int validsample_{0u};
+            /** \brief cost of current iteration performed */
+            base::Cost iterationcost_{std::numeric_limits<double>::quiet_NaN()};
+
 
             // For sorting a list of costs and getting only their sorted indices
             struct CostIndexCompare

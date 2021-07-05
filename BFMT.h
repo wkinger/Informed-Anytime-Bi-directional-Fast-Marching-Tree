@@ -139,6 +139,10 @@ namespace ompl
             {
                 numSamples_ = numSamples;
             }
+            void setTerminatetime(const unsigned int terminatetime)
+            {
+                terminatetime_ = terminatetime;
+            }
 
             /** \brief Set the number of states that the planner should sample.
                 The planner will sample this number of states in addition to the
@@ -154,6 +158,10 @@ namespace ompl
             unsigned int getNumSamples() const
             {
                 return numSamples_;
+            }
+            unsigned int getTerminatetime() const
+            {
+                return terminatetime_;
             }
             /** \brief Set batch sampling factor. */
             void setBatchFactor(const double factor)
@@ -255,6 +263,10 @@ namespace ompl
             bool getExtendedFMT() const
             {
                 return extendedFMT_;
+            }
+            ompl::base::Cost iterationCost() const
+            {
+                return iterationcost_;
             }
 
             /** \brief Sets exploration strategy: balanced true expands one tree every iteration.
@@ -490,6 +502,7 @@ namespace ompl
                 return lastCost_;
             }
 
+
             unsigned int numIterations() const
             {
                 return iterations_;
@@ -619,6 +632,8 @@ namespace ompl
 
             /** \brief The number of samples to use when planning */
             unsigned int numSamples_{2000u};
+            /** \brief Number of iterations*/
+            unsigned int terminatetime_{5u};
 
             /** \brief The number of batch samples to use when planning */
             unsigned int batchnumSamples_{1000u};//
@@ -709,6 +724,8 @@ namespace ompl
             unsigned int iterTimes_{0u};
             /** \brief Number of iteration times the extendFMT* performed */
             unsigned int validsample_{0u};
+            /** \brief cost of current iteration performed */
+            base::Cost iterationcost_{std::numeric_limits<double>::quiet_NaN()};
 
 
             /** \brief The number of batch samples to use when planning */

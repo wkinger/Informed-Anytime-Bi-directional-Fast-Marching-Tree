@@ -74,6 +74,7 @@ ompl::geometric::FMT::FMT(const base::SpaceInformationPtr &si)
     ompl::base::Planner::declareParam<bool>("heuristics", this, &FMT::setHeuristics, &FMT::getHeuristics, "0,1");
     ompl::base::Planner::declareParam<bool>("extended_fmt", this, &FMT::setExtendedFMT, &FMT::getExtendedFMT, "0,1");
     ompl::base::Planner::declareParam<double>("batchfactor", this, &FMT::setBatchFactor, &FMT::getBatchFactor, "0.1:0.05:50.");
+    ompl::base::Planner::declareParam<unsigned int>("terminatetime", this, &FMT::setTerminatetime, &FMT::getTerminatetime, "1:1:500");
 
     addPlannerProgressProperty("best cost REAL", [this] { return std::to_string(bestCost().value()); });
     addPlannerProgressProperty("iterations INTEGER", [this] { return std::to_string(numIterations()); });
@@ -96,6 +97,10 @@ ompl::geometric::FMT::FMT(const base::SpaceInformationPtr &si)
     addPlannerProgressProperty("validsample INTEGER", [this]
                                {
                                    return std::to_string(validsamples());
+                               });
+    addPlannerProgressProperty("iteration cost REAL", [this]
+                               {
+                                   return std::to_string(iterationCost().value());
                                });
 }
 
@@ -177,10 +182,12 @@ void ompl::geometric::FMT::clear()
     collisionChecks_ = 0;
     iterations_ = 0;
     bestCost_ = base::Cost(std::numeric_limits<double>::quiet_NaN());
+    iterationcost_ = base::Cost(std::numeric_limits<double>::quiet_NaN());
     sampleCount_ = 0;
     validsample_ = 0;
     extendCount_ = 0;
     iterTimes_ = 0;
+
 //    numSamples_ = 500; // change depend need
 }
 
@@ -445,6 +452,7 @@ ompl::base::PlannerStatus ompl::geometric::FMT::solve(const base::PlannerTermina
                 { // 若z点到达目标点，相似解距离设定为0,解motion为z，停止单次扩展搜索
                     lastGoalMotion_ = z;
                     bestCost_ = lastGoalMotion_->getCost();
+                    iterationcost_ = lastGoalMotion_->getCost();
                     break;
                 }
                 successfulExpansion = expandTreeFromNode(&z); // 由z向四周搜索扩展一次
@@ -694,6 +702,10 @@ ompl::base::PlannerStatus ompl::geometric::FMT::solve(const base::PlannerTermina
         }
         else // 如果规划出路径，改善现存树枝
         {
+            if (iterTimes_== terminatetime_)
+            {
+                break;
+            }
 //            improvsolved_ = true; // 改进求解标志
             neighborhoods_.clear(); // 清除所有点及其附近点map
             Open_.clear(); // 清除open集合
@@ -779,10 +791,11 @@ ompl::base::PlannerStatus ompl::geometric::FMT::solve(const base::PlannerTermina
                 if ((goal->isSatisfied(z->getState())))
                 { // 若z点到达目标点，相似解距离设定为0,解motion为z，停止单次扩展搜索
                     bestCost_ = lastGoalMotion_->getCost();
+                    iterationcost_ = lastGoalMotion_->getCost();
                     break;
                 }
                 successfulExpansion = expandTreeFromNode(&z);
-                if ( (lastMotionCostValue - lastGoalMotion_->getCost().value()) >0 )
+                if ( (lastMotionCostValue - lastGoalMotion_->getCost().value()) > 0 )
                 {  // draw pic 画图，并实时追踪改变的求解路径
                     bestCost_ = lastGoalMotion_->getCost();
                     lastMotionCostValue = lastGoalMotion_->getCost().value();
@@ -795,9 +808,13 @@ ompl::base::PlannerStatus ompl::geometric::FMT::solve(const base::PlannerTermina
                     }
                 }
             }while( successfulExpansion && !ptc); // 单次扩展成功并且时间未到继续循环
-            OMPL_DEBUG("improving path cost: %f", lastGoalMotion_->getCost().value());
+            OMPL_DEBUG("%u th search find improving path cost: %f", iterTimes_,lastGoalMotion_->getCost().value());
             OMPL_INFORM("%s: improving Created %u states", getName().c_str(), nn_->size());
         }//else
+        if (sufficientlyShort)
+        {
+            break;
+        }
         if (sufficientlyShort)
         {
             break;
