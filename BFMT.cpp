@@ -38,34 +38,6 @@ namespace ompl
            ompl::base::Planner::declareParam<bool>("cache_cc", this, &BFMT::setCacheCC, &BFMT::getCacheCC, "0,1");
            ompl::base::Planner::declareParam<bool>("extended_fmt", this, &BFMT::setExtendedFMT, &BFMT::getExtendedFMT,
                                                    "0,1");
-           ompl::base::Planner::declareParam<double>("batchfactor", this, &BFMT::setBatchFactor, &BFMT::getBatchFactor, "0.1:0.05:50.");
-            ompl::base::Planner::declareParam<unsigned int>("terminatetime", this, &BFMT::setTerminatetime, &BFMT::getTerminatetime, "1:1:500");
-           addPlannerProgressProperty("best cost REAL", [this] { return std::to_string(lastCost().value()); });
-           addPlannerProgressProperty("iterations INTEGER", [this] { return std::to_string(numIterations()); });
-           addPlannerProgressProperty("sample count INTEGER", [this]
-                                      {
-                                          return std::to_string(numSamples());
-                                      });
-           addPlannerProgressProperty("collision checks INTEGER", [this]
-                                      {
-                                          return std::to_string(numCollisionChecks());
-                                      });
-           addPlannerProgressProperty("extendFMT times INTEGER", [this]
-                                      {
-                                          return std::to_string(numExtend());
-                                      });//引号里面不能有特殊字符，如＊号
-           addPlannerProgressProperty("iteration times INTEGER", [this]
-                                      {
-                                          return std::to_string(numIterTimes());
-                                      });
-           addPlannerProgressProperty("validsample INTEGER", [this]
-                                      {
-                                          return std::to_string(validsample());
-                                      });
-           addPlannerProgressProperty("iteration cost REAL", [this]
-                                      {
-                                          return std::to_string(iterationCost().value());
-                                      });
        }
 
        ompl::geometric::BFMT::~BFMT()
@@ -136,7 +108,7 @@ namespace ompl
            Planner::clear();
 
            connect_motion_=nullptr;//modify
-//           setNumSamples(numSamples_);
+           setNumSamples(numSamples_);
            sampler_.reset();
            freeMemory();
            if (nn_)
@@ -146,14 +118,8 @@ namespace ompl
            Open_elements[FWD].clear();
            Open_elements[REV].clear();
            neighborhoods_.clear();
-           lastCost_ = base::Cost(std::numeric_limits<double>::quiet_NaN());
-           iterationcost_ = base::Cost(std::numeric_limits<double>::quiet_NaN());
+           lastCost = base::Cost(std::numeric_limits<double>::quiet_NaN());
            collisionChecks_ = 0;
-           iterations_ = 0;
-           sampleCount_ = 0;
-           extendCount_ = 0;
-           validsample_ = 0;
-           iterTimes_ = 0;
        }
 
        void BFMT::getPlannerData(base::PlannerData &data) const
@@ -264,14 +230,12 @@ namespace ompl
            while (nodeCount < numSamples_ && !ptc)
            {
                sampler_->sampleUniform(motion->getState());
-               ++sampleCount_;
                sampleAttempts++;
                if (si_->isValid(motion->getState()))
                {  // collision checking
                    ++nodeCount;
                    nn->add(motion);
                    motion = new BiDirMotion(si_, &tree_);
-                   ++validsample_;
                }
            }
            si_->freeState(motion->getState());
@@ -304,8 +268,7 @@ namespace ompl
                // Sample numSamples_ number of nodes from the free configuration space
                while (nodeCount < batchnumSamples_ && !ptc)
                {
-                   infSampler_->sampleUniform(motion->getState(), lastCost_);
-                   ++sampleCount_;
+                   infSampler_->sampleUniform(motion->getState(), lastCost);
                    sampleAttempts++;
 
                    bool collision_free = si_->isValid(motion->getState());
@@ -315,7 +278,6 @@ namespace ompl
                        nodeCount++;
                        nn->add(motion);
                        motion = new BiDirMotion(si_, &tree_);
-                       ++validsample_;
                    }  // If collision free
                }      // While nodeCount < numSamples
                si_->freeState(motion->getState());
@@ -430,7 +392,7 @@ namespace ompl
                goalMotion = new BiDirMotion(si_, &tree_);
                si_->copyState(goalMotion->getState(), st);
 
-//               goalState_=goalMotion->getState();//modify
+               goalState_=goalMotion->getState();//modify
 
                goalMotion->currentSet_[FWD] = BiDirMotion::SET_UNVISITED;
                nn_->add(goalMotion);  // S <-- {x_goal}
@@ -532,12 +494,13 @@ namespace ompl
                    path->append(mpath_[i]->getState());
                }
 //               mPathSize_ = mpath_.size();
-                OMPL_DEBUG("total path cost: %f\n", lastCost_.value());
+                OMPL_DEBUG("total path cost: %f\n", lastCost.value());
                static const bool approximate = false;
                static const double cost_difference_from_goal = 0.0;
                pdef_->addSolutionPath(path, approximate, cost_difference_from_goal, getName());
-
-//               drawPathe();
+                finalSuccessful_=true;
+               drawPathe();
+               finalSuccessful_=false;
                 OMPL_DEBUG("Total path cost: %f\n", fwd_cost.value() + rev_cost.value());
                return base::PlannerStatus(true, false);
            }
@@ -549,8 +512,8 @@ namespace ompl
        void BFMT::traceSolutionPathThroughTree(BiDirMotion *&connection_point)
        {
            base::Cost fwd_cost, rev_cost, connection_cost;
-           BiDirMotionPtrs pwdpath_;
-           BiDirMotionPtrs revpath_;
+//           BiDirMotionPtrs pwdpath_;
+//           BiDirMotionPtrs revpath_;
            // Construct the solution path
            if(tree_==FWD)
            {
@@ -558,14 +521,14 @@ namespace ompl
 //           BiDirMotionPtrs path_fwd;
            tracePath(connection_point, pwdpath_);
            fwd_cost = connection_point->getCost();
-//           pwdPathSize_ = pwdpath_.size();
+           pwdPathSize_ = pwdpath_.size();
 
            swapTrees();
 
 //           BiDirMotionPtrs path_rev;
            tracePath(connection_point, revpath_);
            rev_cost = connection_point->getCost();
-//           revPathSize_ = revpath_.size();
+           revPathSize_ = revpath_.size();
            swapTrees();
            }
            else
@@ -574,17 +537,17 @@ namespace ompl
 //               BiDirMotionPtrs path_rev;
                tracePath(connection_point, revpath_);
                rev_cost = connection_point->getCost();
-//               revPathSize_ = revpath_.size();
+               revPathSize_ = revpath_.size();
 
                swapTrees();
 //               BiDirMotionPtrs path_fwd;
                pwdpath_.clear();
                tracePath(connection_point, pwdpath_);
                fwd_cost = connection_point->getCost();
-//               pwdPathSize_ = pwdpath_.size();
+               pwdPathSize_ = pwdpath_.size();
                swapTrees();
            }
-           lastCost_ = opt_->combineCosts(fwd_cost,rev_cost);//modify
+           lastCost = opt_->combineCosts(fwd_cost,rev_cost);//modify
 
 //           std::reverse(path_rev.begin(), path_rev.end());
 ////            if(path_rev[0]->getParent()!=nullptr)
@@ -642,7 +605,6 @@ namespace ompl
            {
                if (!precomputeNN_)
                    saveNeighborhood(nn_, i);  // nearest neighbors
-
                if (i->getCurrentSet() == BiDirMotion::SET_UNVISITED)
                {
                    zNear.push_back(i);
@@ -688,7 +650,7 @@ namespace ompl
                   }
               }
 
-              //4.5 2021 modify new state rejection based on inadmissiable Heuristic
+              //4.5 2021 modify
               base::Cost improvedsolutionHeuristic;
 
 //               if(tree_==FWD)
@@ -711,12 +673,14 @@ namespace ompl
 //               }
 
               // xMin was found
-              if (xMin != nullptr&& opt_->isCostBetterThan(improvedsolutionHeuristic,lastCost_)||
+              if (xMin != nullptr&& opt_->isCostBetterThan(improvedsolutionHeuristic,lastCost)||
                     (xMin != nullptr&& connection_point == nullptr))
+//                  if (xMin != nullptr)
                {
                    bool collision_free = false;
                    if (cacheCC_)
                    {
+
                        if (!xMin->alreadyCC(x))
                        {
                            collision_free = si_->checkMotion(xMin->getState(), x->getState());
@@ -769,11 +733,8 @@ namespace ompl
                                    connection_point = x;
 
                                    connect_motion_=connection_point;//modify
-//                                   connectchange_ = true;
-//                                   std::cout << "connect_motion has been updated: " <<
-//                                             connection_point->cost_[FWD].value()+connection_point->cost_[REV].value()
-//                                             <<" fwd_cost: "<<connection_point->cost_[FWD].value()
-//                                            <<" rev_cost: "<<connection_point->cost_[REV].value()<< std::endl;//test code
+                                   connectchange_ = true;
+                                   OMPL_DEBUG("connect_point has been changed: %f", connection_point->cost_[FWD].value() + connection_point->cost_[REV].value());
                                }
                            }
                        }
@@ -786,7 +747,7 @@ namespace ompl
 
                //modify begin
                if((connection_point!=nullptr) && (x->getCurrentSet() == BiDirMotion::SET_CLOSED))
-      //        if (x->getSetType() == Motion::SET_CLOSED) // 优化解
+//               if (x->getCurrentSet() == BiDirMotion::SET_CLOSED) // 优化解
               {
                   std::vector<BiDirMotion *> hNear; // 令x点附近的Open属性并且不与x同父节点的点为h集合
                   hNear.reserve(xNeighborhoodSize); // 开辟内存
@@ -828,6 +789,9 @@ namespace ompl
                           bool collision_free = false;
                           if (cacheCC_) // 如果碰撞检测缓存标志为真
                           {
+//                              if(xMin->alreadyCC(hhNear))
+//                                   ++cachecc;
+//                              std::cout<<"cache cc "<< cachecc <<std::endl;
                               if (!x->alreadyCC(hhNear)) // 如果x与其最优父节点没进行过碰撞检测
                               {
                                   collision_free = si_->checkMotion(hhNear->getState(), x->getState()); // 进行碰撞检测
@@ -887,12 +851,12 @@ namespace ompl
            bool success = false;
            int i = 1;
            int in = 1;
-//           base::Cost costThreshold(1660); // 设定cost阈值，解的cost值小于1800则中断计算
-//           opt_->setCostThreshold(costThreshold);
+           base::Cost costThreshold(10); // 设定cost阈值，解的cost值小于1800则中断计算
+           opt_->setCostThreshold(costThreshold);
            bool sufficientlyShort = false;
            bool firstSuccessful_ = false;
 //           bool finalSuccessful_ = false;
-          int improvN = numSamples_;
+            int improveN = numSamples_;
           while(!ptc)
           {
 
@@ -946,9 +910,8 @@ namespace ompl
 //               std::cout << "the " << i << " time planning begin " << std::endl;
                while (!success)
                {
-                   ++iterations_;
                    improvedExpandTreeFromNode(z, connection_point);
-//                   drawPathe();//单点绘制modify
+                   drawPathe();//单点绘制modify
 
                    // Check if the algorithm should terminate.  Possibly redefines connection_point.
                    if (termination(z, connection_point, ptc))
@@ -957,10 +920,9 @@ namespace ompl
 //                       successful_= true;
                        firstSuccessful_ = true;
                        traceSolutionPathThroughTree(connection_point);
-                       OMPL_DEBUG("first path cost: %f", lastCost_.value());
-                       iterationcost_ = lastCost_;
-                       ++iterTimes_;
-//                       drawPathe();//绘制最终路径modify
+                       OMPL_DEBUG("first path cost: %f", lastCost.value());
+
+                       drawPathe();//绘制最终路径modify
                    }
 
                    else//实现批量ｅｘｔｅｎｄ采点
@@ -968,7 +930,7 @@ namespace ompl
                        if (Open_[tree_].empty())  // If this heap is empty...
                        {
                             insertNewSampleInOpen(ptc);
-//                           drawPathe();
+                           drawPathe();
                        }
 
                        // This function will be always reached with at least one state in one heap.
@@ -984,10 +946,7 @@ namespace ompl
 
             else
             {
-                if (iterTimes_== terminatetime_)
-                {
-                    break;
-                }
+                waitKey(800);
 //                std::cout<< "the "<<in <<" times improving planning begin " << std:: endl;
                 Open_[FWD].clear();
                 Open_[REV].clear();
@@ -997,22 +956,70 @@ namespace ompl
                 BiDirMotion *z; // 设定搜索点
                 bool improvesucess = false;
                 useFwdTree();
-//                                    useRevTree();
-//                                    if(tree_==FWD)
-//                                        std::cout<<"current tree type:  FWD"<< std:: endl;
-//                                    else
-//                                        std::cout<<"current tree type:  REV"<< std:: endl;
 
                 int ii = 1;
                 std::vector<BiDirMotion *> allMotions;
                 nn_->list(allMotions); // 将所有数据存入allMotions中
                 nn_->clear();
-                for (BiDirMotion *everyMotion : allMotions) // 遍历所有点数据
+//                for (BiDirMotion *everyMotion : allMotions) // 遍历所有点数据
+//                {
+//                    base::Cost solutionHeuristic;
+//                    if (ii != 1)
+//                    { // 计算从起点过motion点到目标点的最小cost值
+//                        base::Cost costToCome;
+
+//                        // Start with infinite cost
+//                        costToCome = opt_->infiniteCost();
+
+//                        // Find the min from each start
+//                        costToCome = opt_->betterCost(costToCome,
+//                                    opt_->motionCost(x_init->getState(),everyMotion->getState()));  // lower-bounding cost from the start to the state
+
+//                        const base::Cost costToGo =
+//                                opt_->costToGo(everyMotion->getState(), pdef_->getGoal().get());  // lower-bounding cost from the state to the goal
+//                        solutionHeuristic = opt_->combineCosts(costToCome, costToGo);            // add the two costs
+//                    }
+
+
+//                    if (ii == 1)
+//                    { // 设定搜索起始点
+//                        Open_elements[FWD][everyMotion] = Open_[FWD].insert(everyMotion);
+//                        everyMotion->currentSet_[FWD] = BiDirMotion::SET_OPEN;
+////                             z = everyMotion;  // z <-- xinit
+//                        nn_->add(everyMotion); // 将数据添加到树中
+//                    }
+//                    else
+//                    {
+//                        if(opt_->isCostBetterThan(solutionHeuristic,lastCost))
+//                             nn_->add(everyMotion);
+
+//                        if((everyMotion->getParent() != nullptr)
+//                                          && (opt_->isCostBetterThan(solutionHeuristic,lastCost)))
+//                        {
+//                            Open_elements[FWD][everyMotion] = Open_[FWD].insert(everyMotion);
+//                            everyMotion->currentSet_[FWD] = BiDirMotion::SET_OPEN;
+//                        }
+//                        useRevTree();
+//                        if((everyMotion->getParent() != nullptr)
+//                                          && (opt_->isCostBetterThan(solutionHeuristic,lastCost)))
+//                        {
+////                                std::cout<<"add into reverse tree"<< std:: endl;
+//                            Open_elements[REV][everyMotion] = Open_[REV].insert(everyMotion);
+//                            everyMotion->currentSet_[REV] = BiDirMotion::SET_OPEN;
+//                        }
+//                        swapTrees();
+//                    }
+//                    ii = ii + 1;
+//                }
+                for (BiDirMotion *everyMotion : allMotions) // 遍历所有点数据 (tree_ + 1) % 2
                 {
                     base::Cost solutionHeuristic;
+                    base::Cost solutionHeuristicOnTrees;
+
                     if (ii != 1)
                     { // 计算从起点过motion点到目标点的最小cost值
                         base::Cost costToCome;
+                        base::Cost costToComeOnTrees;
 
                         // Start with infinite cost
                         costToCome = opt_->infiniteCost();
@@ -1020,12 +1027,34 @@ namespace ompl
                         // Find the min from each start
                         costToCome = opt_->betterCost(costToCome,
                                     opt_->motionCost(x_init->getState(),everyMotion->getState()));  // lower-bounding cost from the start to the state
-
-                        const base::Cost costToGo =
+//                        base::Cost costToGo =
+//                              opt_->motionCostHeuristic(everyMotion->getState(), heurGoalState_[tree_]);
+                        base::Cost costToGo =
                                 opt_->costToGo(everyMotion->getState(), pdef_->getGoal().get());  // lower-bounding cost from the state to the goal
                         solutionHeuristic = opt_->combineCosts(costToCome, costToGo);            // add the two costs
-                    }
+//                        std::cout<<"solutionHeuristic: "<< solutionHeuristic<<std:: endl;
+                        if(everyMotion->parent_[(tree_ + 1) % 2]!=nullptr||everyMotion->parent_[tree_]!=nullptr)
+                        {
+                            if (everyMotion->parent_[(tree_ + 1) % 2]!= nullptr)
+                            {
+                                costToGo = opt_->motionCostHeuristic(everyMotion->getState(), heurGoalState_[(tree_ + 1) % 2]);
+//                                costToComeOnTrees = everyMotion->getAnothertCost();
+//                                useRevTree();
+                                costToComeOnTrees = everyMotion->cost_[(tree_ + 1) % 2];
+                                solutionHeuristicOnTrees = opt_->combineCosts(costToComeOnTrees,costToGo);
+//                                std::cout<<"solutionHeuristicOnTrees: "<< solutionHeuristicOnTrees<<" costtogo: "<<costToGo<<std:: endl;
+//                                swapTrees();
+                            }
+                            else
+                               {
+                                costToComeOnTrees = everyMotion->getCost();
+                                solutionHeuristicOnTrees = opt_->combineCosts(costToComeOnTrees,costToGo);
+                               }
 
+//                            std::cout<<"solutionHeuristicOnTrees: "<< solutionHeuristicOnTrees<<std:: endl;
+                        }
+
+                    }
 
                     if (ii == 1)
                     { // 设定搜索起始点
@@ -1036,36 +1065,55 @@ namespace ompl
                     }
                     else
                     {
-                        if(opt_->isCostBetterThan(solutionHeuristic,lastCost_))
-                             nn_->add(everyMotion);
-
-                        if((everyMotion->getParent() != nullptr)
-                                          && (opt_->isCostBetterThan(solutionHeuristic,lastCost_)))
+                        if(everyMotion->parent_[(tree_ + 1) % 2]==nullptr&&everyMotion->parent_[tree_]==nullptr
+                                && opt_->isCostBetterThan(solutionHeuristic,lastCost))
                         {
+                            everyMotion->currentSet_[FWD] = BiDirMotion::SET_UNVISITED;
+                             nn_->add(everyMotion);
+                        }
+
+                        if(((everyMotion->parent_[tree_]!= nullptr)||(everyMotion->parent_[(tree_ + 1) % 2]!=nullptr))
+                                          && (opt_->isCostBetterThan(solutionHeuristicOnTrees,lastCost)))
+                        {
+                            if(everyMotion->parent_[tree_]!= nullptr&&everyMotion->parent_[(tree_ + 1) % 2]==nullptr)
+                            {
+//                            std::cout<<"add into forward tree"<< std:: endl;
                             Open_elements[FWD][everyMotion] = Open_[FWD].insert(everyMotion);
                             everyMotion->currentSet_[FWD] = BiDirMotion::SET_OPEN;
+                            nn_->add(everyMotion);
+                            }
+                            if(everyMotion->parent_[(tree_ + 1) % 2]!= nullptr&&everyMotion->parent_[tree_]==nullptr)
+                            {
+    //                                std::cout<<"add into reverse tree"<< std:: endl;
+                                Open_elements[REV][everyMotion] = Open_[REV].insert(everyMotion);
+                                everyMotion->currentSet_[REV] = BiDirMotion::SET_OPEN;
+                                nn_->add(everyMotion);
+                            }
+                            else if(everyMotion->parent_[(tree_ + 1) % 2]!= nullptr&&everyMotion->parent_[tree_]!=nullptr)
+                            {
+
+                                 nn_->add(everyMotion);
+                            }
                         }
-                        useRevTree();
-                        if((everyMotion->getParent() != nullptr)
-                                          && (opt_->isCostBetterThan(solutionHeuristic,lastCost_)))
-                        {
-//                                std::cout<<"add into reverse tree"<< std:: endl;
-                            Open_elements[REV][everyMotion] = Open_[REV].insert(everyMotion);
-                            everyMotion->currentSet_[REV] = BiDirMotion::SET_OPEN;
-                        }
-                        swapTrees();
+//                        useRevTree();
+//                        if((everyMotion->getParent() != nullptr)
+//                                          && (opt_->isCostBetterThan(solutionHeuristicOnTrees,lastCost)))
+//                        {
+////                                std::cout<<"add into reverse tree"<< std:: endl;
+//                            Open_elements[REV][everyMotion] = Open_[REV].insert(everyMotion);
+//                            everyMotion->currentSet_[REV] = BiDirMotion::SET_OPEN;
+//                            nn_->add(everyMotion);
+//                        }
+//                        swapTrees();
                     }
                     ii = ii + 1;
                 }
-                 ++iterTimes_;
-
-                setBatchNumSamples(improvN); // 设定采样点
-//                std::cout<<"batch samples: "<< batchnumSamples_ << "nnsize: "<< nn_->size()<<std::endl;
+                setBatchNumSamples(improveN); // 设定采样点
                 if (sampler_)
                     sampler_.reset();
                 sampleFree(nn_,ptc);
-                improvN = improvN*(increaseFactor+1);
-                OMPL_INFORM("Improving planning with %u states already in datastructure", nn_->size());
+                improveN = improveN*2;
+                OMPL_INFORM("%s: Improving planning with %u states already in datastructure", getName().c_str(), nn_->size());
                 // Calculate the nearest neighbor search radius
                 if (nearestK_)
                 {
@@ -1120,21 +1168,20 @@ namespace ompl
 
                 useFwdTree();
                 z = x_init;
-                double lastMotionCostValue = lastCost_.value();
+                double lastMotionCostValue = lastCost.value();
                 while (!improvesucess)
                 {
-                    ++iterations_;
                     improvedExpandTreeFromNode(z, connection_point);
                     traceSolutionPathThroughTree(connection_point);
-//                    drawPathe();//单点绘制modify
-                    sufficientlyShort = opt_->isSatisfied(lastCost_);
-                    if ( (lastMotionCostValue - lastCost_.value()) >0)/*当优化值大于1是输出结果*/
+                    drawPathe();//单点绘制modify
+                    sufficientlyShort = opt_->isSatisfied(lastCost);
+                    if ( (lastMotionCostValue - lastCost.value()) >= 1)/*当优化值大于1是输出结果*/
                     {  // draw pic 画图，并实时追踪改变的求解路径
-                        lastMotionCostValue = lastCost_.value();
+                        lastMotionCostValue = lastCost.value();
 //                            traceSolutionPathThroughTree(connection_point);
 //                            drawPathe();
-//                        lastCost=opt_->combineCosts(connection_point->cost_[FWD],connection_point->cost_[REV]);
-                        OMPL_DEBUG("%u th search find improving path cost: %f", iterTimes_,lastCost_.value());
+                        lastCost=opt_->combineCosts(connection_point->cost_[FWD],connection_point->cost_[REV]);
+                        OMPL_DEBUG("improving path cost: %f", lastCost.value());
 
                         if (sufficientlyShort)
                         {
@@ -1148,9 +1195,8 @@ namespace ompl
                         firstSuccessful_ = true;
                         improvesucess = true;
                         traceSolutionPathThroughTree(connection_point);
-                        iterationcost_ = lastCost_;
-                        OMPL_DEBUG("%u th search find improving path cost: %f", iterTimes_,lastCost_.value());
-//                        drawPathe();//绘制最终路径modify
+                        OMPL_DEBUG("improving path cost: %f", lastCost.value());
+                        drawPathe();//绘制最终路径modify
                         in = in + 1;
                     }
 
@@ -1164,7 +1210,7 @@ namespace ompl
                         return true;
                     }
                 }//while(!improvesuccess)
-            }//else
+            }//while(connection_point!=nullptr)
           }//while(!finalsuccessful)
                earlyFailure = false;
                return earlyFailure;
@@ -1181,137 +1227,137 @@ namespace ompl
            }
        }
 
-//       void ompl::geometric::BFMT::drawPathe()
-//       {
-//           if(tree_==FWD)
-//           {
-//           // 显示并输出最终规划路径图像，并输出图像文件
-//           Mat envImageCopy; // 复制后的图像变量
-//           Mat envImageResize; // 修改图像尺寸后点图像变量
-//           envImage_.copyTo(envImageCopy); // 复制图像
-////            useFwdTree();
-//           BiDirMotionPtrs  drawMotions;
-//           nn_->list(drawMotions); // 将树上的数据存入testMotions中
-//           for (BiDirMotion *drawMotion : drawMotions) // 遍历树上点数据
-//           {
-//               double stateX = drawMotion->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0]; // 树上数据点的x，y值
-//               double stateY = drawMotion->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
-//               circle( envImageCopy,Point( stateX, stateY ),6,Scalar(0, 0, 255 ),-1,6 ); //画树上状态点
-//               if (drawMotion->getParent() != nullptr) // 如果父节点不空，即不是起点
-//               { // 打印父节点，画点和线
-//                   double parentSateX = drawMotion->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
-//                   double parentSateY = drawMotion->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
-//                   if(tree_==FWD)
-//                   {
-//                       circle( envImageCopy,Point( parentSateX, parentSateY ),6,Scalar( 0, 0, 255 ),-1,6 );
-//                       line( envImageCopy, Point( parentSateX, parentSateY ), Point( stateX, stateY ), Scalar( 0, 255, 0 ), 2, CV_AA );
-//                   }
-//                   else
-//                   {
-//                       circle( envImageCopy,Point( parentSateX, parentSateY ),6,Scalar(0, 0, 255),-1,6 );
-//                       line( envImageCopy, Point( parentSateX, parentSateY ), Point( stateX, stateY ), Scalar( 125, 0, 125 ), 2, CV_AA );
-//                   }
-//                   }
-//           }
-//           swapTrees();
-//           for (BiDirMotion *drawMotion : drawMotions) // 遍历树上点数据
-//           {
-//               double stateX = drawMotion->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0]; // 树上数据点的x，y值
-//               double stateY = drawMotion->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
-//               circle( envImageCopy,Point( stateX, stateY ),6,Scalar(0, 0, 255 ),-1,8 ); //画树上状态点
-//               if (drawMotion->getParent() != nullptr) // 如果父节点不空，即不是起点
-//               { // 打印父节点，画点和线
-//                   double parentSateX = drawMotion->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
-//                   double parentSateY = drawMotion->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
-//                   if(tree_==FWD)
-//                   {
-//                       circle( envImageCopy,Point( parentSateX, parentSateY ),6,Scalar( 0, 0, 255 ),-1,6 );
-//                       line( envImageCopy, Point( parentSateX, parentSateY ), Point( stateX, stateY ), Scalar( 0, 255, 0 ), 2, CV_AA );
-//                   }
-//                   else
-//                   {
-//                       circle( envImageCopy,Point( parentSateX, parentSateY ),6,Scalar(0, 0, 255),-1,6 );
-//                       line( envImageCopy, Point( parentSateX, parentSateY ), Point( stateX, stateY ), Scalar( 125, 0, 125 ), 2, CV_AA );
-//                   }
-//                   }
-//           }
-//           swapTrees();
-//           // 画起点和终点, circle, 参数：图像、位置、半径、BRG颜色、填满圆、8联通绘图方式
-//           double startStateX = drawMotions[0]->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
-//           double startStateY = drawMotions[0]->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
-//           double goalStateX = goalState_->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
-//           double goalStateY = goalState_->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
+       void ompl::geometric::BFMT::drawPathe()
+       {
+           if(tree_==FWD)
+           {
+           // 显示并输出最终规划路径图像，并输出图像文件
+           Mat envImageCopy; // 复制后的图像变量
+           Mat envImageResize; // 修改图像尺寸后点图像变量
+           envImage_.copyTo(envImageCopy); // 复制图像
+//            useFwdTree();
+           BiDirMotionPtrs  drawMotions;
+           nn_->list(drawMotions); // 将树上的数据存入testMotions中
+           for (BiDirMotion *drawMotion : drawMotions) // 遍历树上点数据
+           {
+               double stateX = drawMotion->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0]; // 树上数据点的x，y值
+               double stateY = drawMotion->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
+               circle( envImageCopy,Point( stateX, stateY ),3,Scalar(120, 180, 0 ),-1,8); //画树上状态点
+               if (drawMotion->getParent() != nullptr) // 如果父节点不空，即不是起点
+               { // 打印父节点，画点和线
+                   double parentSateX = drawMotion->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
+                   double parentSateY = drawMotion->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
+                   if(tree_==FWD)
+                   {
+                       circle( envImageCopy,Point( parentSateX, parentSateY ),3,Scalar(120, 180, 0 ),-1,8 );
+                       line( envImageCopy, Point( parentSateX, parentSateY ), Point( stateX, stateY ), Scalar( 200,0, 0 ), 3, CV_AA );
+                   }
+                   else
+                   {
+                       circle( envImageCopy,Point( parentSateX, parentSateY ),3,Scalar(120, 180, 0),-1,8 );
+                       line( envImageCopy, Point( parentSateX, parentSateY ), Point( stateX, stateY ), Scalar( 0, 200, 150), 3, CV_AA );
+                   }
+                   }
+           }
+           swapTrees();
+           for (BiDirMotion *drawMotion : drawMotions) // 遍历树上点数据
+           {
+               double stateX = drawMotion->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0]; // 树上数据点的x，y值
+               double stateY = drawMotion->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
+               circle( envImageCopy,Point( stateX, stateY ),3,Scalar(120, 180, 0 ),-1,8 ); //画树上状态点
+               if (drawMotion->getParent() != nullptr) // 如果父节点不空，即不是起点
+               { // 打印父节点，画点和线
+                   double parentSateX = drawMotion->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
+                   double parentSateY = drawMotion->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
+                   if(tree_==FWD)
+                   {
+                       circle( envImageCopy,Point( parentSateX, parentSateY ),3,Scalar(120, 180, 0 ),-1,8 );
+                       line( envImageCopy, Point( parentSateX, parentSateY ), Point( stateX, stateY ), Scalar( 200, 0, 0 ), 3, CV_AA );
+                   }
+                   else
+                   {
+                       circle( envImageCopy,Point( parentSateX, parentSateY ),3,Scalar(120, 180, 0 ),-1,8 );
+                       line( envImageCopy, Point( parentSateX, parentSateY ), Point( stateX, stateY ), Scalar( 0, 200, 80 ), 3, CV_AA );
+                   }
+                   }
+           }
+           swapTrees();
+           // 画起点和终点, circle, 参数：图像、位置、半径、BRG颜色、填满圆、8联通绘图方式
+           double startStateX = drawMotions[0]->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
+           double startStateY = drawMotions[0]->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
+           double goalStateX = goalState_->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
+           double goalStateY = goalState_->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
 
-//           circle( envImageCopy,Point( startStateX, startStateY ),15,Scalar( 128, 128, 0 ),-1,8 );
-//           circle( envImageCopy,Point( goalStateX, goalStateY ),15,Scalar( 0, 255, 165 ),-1,8 );
+           circle( envImageCopy,Point( startStateX, startStateY ),15,Scalar( 0, 255, 120),-1,8 );
+           circle( envImageCopy,Point( goalStateX, goalStateY ),15,Scalar( 0, 0, 255),-1,8 );
 
-//           // 输出中间图像
-//           cv::namedWindow("path", CV_WINDOW_AUTOSIZE | CV_WINDOW_FREERATIO); // 配置OPENCV窗口
-//           cv::resize(envImageCopy, envImageResize, cv::Size(), 0.65, 0.65); // 改变窗口大小
-//           cv::imshow("path", envImageResize); // 显示窗口图像
-//           if (connect_motion_ != nullptr)
-//           {
-//               double connectStateX = connect_motion_->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
-//               double connectStateY = connect_motion_->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
-//               circle( envImageCopy,Point( connectStateX, connectStateY ),15,Scalar( 255, 0, 165 ),-1,8 );
-//               if(connectchange_)
-//               {
-//                  cv::waitKey(500);
-//                  connectchange_ = false;
-//               }
-//               for (int i = 0; i <= pwdPathSize_ - 1; ++i)
-//               { // 获取路径点x，y值，画最终规划路径线
-//                   double pathSateX = pwdpath_[i]->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
-//                   double pathSateY = pwdpath_[i]->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
-//                   if (pwdpath_[i]->getParent() != nullptr)
-//                   {
-//                       double pathParentSateX = pwdpath_[i]->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
-//                       double pathParentSateY = pwdpath_[i]->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
-//                       line( envImageCopy, Point( pathParentSateX, pathParentSateY ), Point( pathSateX, pathSateY ), Scalar( 255, 0, 0 ), 3, CV_AA );
-//                   }
-//               }
-//               swapTrees();
-//               for (int i = 0; i <= revPathSize_ - 1; ++i)
-//               { // 获取路径点x，y值，画最终规划路径线
-//                   double pathSateX = revpath_[i]->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
-//                   double pathSateY = revpath_[i]->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
-//                   if (revpath_[i]->getParent() != nullptr)
-//                   {
-//                       double pathParentSateX = revpath_[i]->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
-//                       double pathParentSateY = revpath_[i]->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
-//                       line( envImageCopy, Point( pathParentSateX, pathParentSateY ), Point( pathSateX, pathSateY ), Scalar( 255, 0, 0 ), 3, CV_AA );
-//                   }
-//               }
-//               swapTrees();
+           // 输出中间图像
+           cv::namedWindow("path", CV_WINDOW_AUTOSIZE | CV_WINDOW_FREERATIO); // 配置OPENCV窗口
+           cv::resize(envImageCopy, envImageResize, cv::Size(), 0.65, 0.65); // 改变窗口大小
+           cv::imshow("path", envImageResize); // 显示窗口图像
+           if (connect_motion_ != nullptr)
+           {
+               double connectStateX = connect_motion_->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
+               double connectStateY = connect_motion_->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
+               circle( envImageCopy,Point( connectStateX, connectStateY ),15,Scalar( 255, 0, 165 ),-1,8 );
+               if(connectchange_)
+               {
+                  cv::waitKey(500);
+                  connectchange_ = false;
+               }
+               for (int i = 0; i <= pwdPathSize_ - 1; ++i)
+               { // 获取路径点x，y值，画最终规划路径线
+                   double pathSateX = pwdpath_[i]->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
+                   double pathSateY = pwdpath_[i]->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
+                   if (pwdpath_[i]->getParent() != nullptr)
+                   {
+                       double pathParentSateX = pwdpath_[i]->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
+                       double pathParentSateY = pwdpath_[i]->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
+                       line( envImageCopy, Point( pathParentSateX, pathParentSateY ), Point( pathSateX, pathSateY ), Scalar( 255, 0, 255), 6, CV_AA );
+                   }
+               }
+               swapTrees();
+               for (int i = 0; i <= revPathSize_ - 1; ++i)
+               { // 获取路径点x，y值，画最终规划路径线
+                   double pathSateX = revpath_[i]->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
+                   double pathSateY = revpath_[i]->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
+                   if (revpath_[i]->getParent() != nullptr)
+                   {
+                       double pathParentSateX = revpath_[i]->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
+                       double pathParentSateY = revpath_[i]->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
+                       line( envImageCopy, Point( pathParentSateX, pathParentSateY ), Point( pathSateX, pathSateY ), Scalar( 255, 0, 255 ),6, CV_AA );
+                   }
+               }
+               swapTrees();
 
-//               std::string graph = "/home/wangkuan/workspace/Documents/Graph/finalPath.ppm";
-//               cv::namedWindow("path", CV_WINDOW_AUTOSIZE | CV_WINDOW_FREERATIO);
-//               cv::resize(envImageCopy, envImageResize, cv::Size(), 0.65, 0.65);
-//               cv::imshow("path", envImageResize);
+               std::string graph = "/home/wangkuan/workspace/Documents/Graph/finalPath.ppm";
+               cv::namedWindow("path", CV_WINDOW_AUTOSIZE | CV_WINDOW_FREERATIO);
+               cv::resize(envImageCopy, envImageResize, cv::Size(), 0.65, 0.65);
+               cv::imshow("path", envImageResize);
 
-//               if(finalSuccessful_)//这里导致无法绘制ｒｅｖ树
-//               {
-//                   for (int i = 0; i <= mPathSize_ - 1; ++i)
-//                   { // 获取路径点x，y值，画最终规划路径线
-//                       double pathSateX = mpath_[i]->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
-//                       double pathSateY = mpath_[i]->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
-//                       if (mpath_[i]->getParent() != nullptr)
-//                       {
-//                           double pathParentSateX = mpath_[i]->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
-//                           double pathParentSateY = mpath_[i]->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
-//                           line( envImageCopy, Point( pathParentSateX, pathParentSateY ), Point( pathSateX, pathSateY ), Scalar( 255, 0, 0 ), 3, CV_AA );
-//                       }
-//                   }
-//                   std::string graph = "/home/wangkuan/workspace/Documents/Graph/finalPath.ppm";
-//                   cv::namedWindow("path", CV_WINDOW_AUTOSIZE | CV_WINDOW_FREERATIO);
-//                   cv::resize(envImageCopy, envImageResize, cv::Size(), 0.65, 0.65);
-//                   cv::imshow("path", envImageResize);
-//                   cv::waitKey(5000);
-//               }
-//           }
-//           cv::waitKey(1); // 停留1毫秒
-//       }
-//       }
+               if(finalSuccessful_)//这里导致无法绘制ｒｅｖ树
+               {
+                   for (int i = 0; i <= mPathSize_ - 1; ++i)
+                   { // 获取路径点x，y值，画最终规划路径线
+                       double pathSateX = mpath_[i]->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
+                       double pathSateY = mpath_[i]->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
+                       if (mpath_[i]->getParent() != nullptr)
+                       {
+                           double pathParentSateX = mpath_[i]->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
+                           double pathParentSateY = mpath_[i]->getParent()->getState()->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
+                           line( envImageCopy, Point( pathParentSateX, pathParentSateY ), Point( pathSateX, pathSateY ), Scalar( 255, 0, 0 ), 3, CV_AA );
+                       }
+                   }
+                   std::string graph = "/home/wangkuan/workspace/Documents/Graph/finalPath.ppm";
+                   cv::namedWindow("path", CV_WINDOW_AUTOSIZE | CV_WINDOW_FREERATIO);
+                   cv::resize(envImageCopy, envImageResize, cv::Size(), 0.65, 0.65);
+                   cv::imshow("path", envImageResize);
+                   cv::waitKey(5000);
+               }
+           }
+           cv::waitKey(1); // 停留1毫秒
+       }
+       }
 
        void BFMT::insertNewSampleInOpen(const base::PlannerTerminationCondition &ptc)
        {
@@ -1330,17 +1376,8 @@ namespace ompl
            {
                // Get new sample and check whether it is valid.
                sampler_->sampleUniform(m->getState());
-               ++sampleCount_;
-
-//               ++extendCount_;
                if (!si_->isValid(m->getState()))
                    continue;
-               if(si_->isValid(m->getState()))
-               {
-                   ++iterations_;
-                   ++validsample_;
-                   ++extendCount_;
-               }
 
                // Get neighbours of the new sample.
                std::vector<BiDirMotion *> yNear;
@@ -1410,7 +1447,6 @@ namespace ompl
                     i != sortedCostIndices.begin() + yNear.size(); ++i)
                {
                    ++collisionChecks_;
-
                    if (si_->checkMotion(yNear[*i]->getState(), m->getState()))
                    {
                        const base::Cost incCost = opt_->motionCost(yNear[*i]->getState(), m->getState());

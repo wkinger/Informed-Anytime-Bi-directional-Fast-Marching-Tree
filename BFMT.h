@@ -1,4 +1,4 @@
-﻿/*********************************************************************
+/*********************************************************************
 * Software License Agreement (BSD License)
 *
 *  Copyright (c) 2013, Autonomous Systems Laboratory, Stanford University
@@ -49,20 +49,20 @@
 #include <map>
 #include <utility>
 
-//// modify  添加的头文件
-//#include <fstream>
-//#include <stdio.h>
-//#include <sstream>
-//#include <sys/types.h>
-//#include <sys/stat.h>
-//#include <ompl/base/spaces/RealVectorStateSpace.h>
-//#include <opencv2/core/core.hpp>
-//#include <opencv2/highgui/highgui.hpp>
-//#include <opencv2/opencv.hpp>
-//#include <ompl/base/samplers/InformedStateSampler.h>
+// modify  添加的头文件
+#include <fstream>
+#include <stdio.h>
+#include <sstream>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <ompl/base/spaces/RealVectorStateSpace.h>
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/opencv.hpp>
+#include <ompl/base/samplers/InformedStateSampler.h>
 
-//using namespace cv; //OPENCV 空间名
-//// modify end
+using namespace cv; //OPENCV 空间名
+// modify end
 
 namespace ompl
 {
@@ -139,10 +139,6 @@ namespace ompl
             {
                 numSamples_ = numSamples;
             }
-            void setTerminatetime(const unsigned int terminatetime)
-            {
-                terminatetime_ = terminatetime;
-            }
 
             /** \brief Set the number of states that the planner should sample.
                 The planner will sample this number of states in addition to the
@@ -158,21 +154,6 @@ namespace ompl
             unsigned int getNumSamples() const
             {
                 return numSamples_;
-            }
-            unsigned int getTerminatetime() const
-            {
-                return terminatetime_;
-            }
-            /** \brief Set batch sampling factor. */
-            void setBatchFactor(const double factor)
-            {
-                increaseFactor = factor;
-            }
-
-            /** \brief Get batch sampling factor. */
-            double getBatchFactor() const
-            {
-                return increaseFactor;
             }
 
             /** \brief If nearestK is true, FMT will be run using the Knearest strategy */
@@ -263,10 +244,6 @@ namespace ompl
             bool getExtendedFMT() const
             {
                 return extendedFMT_;
-            }
-            ompl::base::Cost iterationCost() const
-            {
-                return iterationcost_;
             }
 
             /** \brief Sets exploration strategy: balanced true expands one tree every iteration.
@@ -497,39 +474,6 @@ namespace ompl
                 }
             };
 
-            ompl::base::Cost lastCost() const
-            {
-                return lastCost_;
-            }
-
-
-            unsigned int numIterations() const
-            {
-                return iterations_;
-            }
-
-            unsigned int numSamples() const
-            {
-                return sampleCount_;
-            }
-            unsigned int validsample() const
-            {
-                return validsample_;
-            }
-
-            unsigned int numCollisionChecks() const
-            {
-                return collisionChecks_;
-            }
-            unsigned int numExtend() const
-            {
-                return extendCount_;
-            }
-            unsigned int numIterTimes() const
-            {
-                return iterTimes_;
-            }
-
             typedef std::vector<BiDirMotion *> BiDirMotionPtrs;
 
         protected:
@@ -631,9 +575,7 @@ namespace ompl
             void insertNewSampleInOpen(const base::PlannerTerminationCondition &ptc);
 
             /** \brief The number of samples to use when planning */
-            unsigned int numSamples_{2000u};
-            /** \brief Number of iterations*/
-            unsigned int terminatetime_{5u};
+            unsigned int numSamples_{500u};
 
             /** \brief The number of batch samples to use when planning */
             unsigned int batchnumSamples_{1000u};//
@@ -713,48 +655,31 @@ namespace ompl
             /** \brief Add new samples if the tree was not able to find a solution. */
             bool extendedFMT_{true};
 
-
-            /** \brief Number of iterations the algorithm performed */
-            unsigned int iterations_{0u};
-            /** \brief Number of samples the algorithm performed */
-            unsigned int sampleCount_{0u};
-            /** \brief Number of iterations the extendFMT* performed */
-            unsigned int extendCount_{0u};
-            /** \brief Number of iteration times the extendFMT* performed */
-            unsigned int iterTimes_{0u};
-            /** \brief Number of iteration times the extendFMT* performed */
-            unsigned int validsample_{0u};
-            /** \brief cost of current iteration performed */
-            base::Cost iterationcost_{std::numeric_limits<double>::quiet_NaN()};
-
-
-            /** \brief The number of batch samples to use when planning */
-             double increaseFactor = {0};// 优化解前，向informed区域中增量添加的点数
-
-             base::Cost lastCost_ = base::Cost(std::numeric_limits<double>::quiet_NaN());
+             base::Cost lastCost = base::Cost(std::numeric_limits<double>::quiet_NaN());
 //            BiDirMotion *connection_point = nullptr;
 //            BiDirMotion *initMotion;
 //            BiDirMotion *goalMotion;
-//            base::State *goalState_;
+            base::State *goalState_;
             BiDirMotion *connect_motion_=nullptr;
 //            bool successful_{false};
-//            bool connectchange_{false};
+            bool connectchange_{false};
 //            bool firstSuccessful_{false};
-//            bool finalSuccessful_{false};
+            bool finalSuccessful_{false};
+            int cachecc = 0;
 
             void traceSolutionPathThroughTree(BiDirMotion *&connection_point);
             void showpath(BiDirMotion *&connection_point);
-//            void drawPathe(); // 画图函数
+            void drawPathe(); // 画图函数
             void improvedExpandTreeFromNode(BiDirMotion *&z, BiDirMotion *&connection_point);
             void updateChildCosts(BiDirMotion *m);
             void removeFromParent(BiDirMotion *m);
-//            int mPathSize_; // 最终解路径点数
-//            BiDirMotionPtrs mpath_;
-//            int pwdPathSize_; // 最终解路径点数
-//            BiDirMotionPtrs pwdpath_;
-//            int revPathSize_; // 最终解路径点数
-//            BiDirMotionPtrs revpath_;
-//            Mat envImage_ = cv::imread("/home/wangkuan/workspace/ompl-1.3.1/tests/resources/ppm/floor.ppm", 1); // 原始图像变量
+            int mPathSize_; // 最终解路径点数
+            BiDirMotionPtrs mpath_;
+            int pwdPathSize_; // 最终解路径点数
+            BiDirMotionPtrs pwdpath_;
+            int revPathSize_; // 最终解路径点数
+            BiDirMotionPtrs revpath_;
+            Mat envImage_ = cv::imread("/home/wangkuan/workspace/ompl-1.3.1/tests/resources/ppm/floor.ppm", 1); // 原始图像变量
 
             // For sorting a list of costs and getting only their sorted indices
             struct CostIndexCompare
