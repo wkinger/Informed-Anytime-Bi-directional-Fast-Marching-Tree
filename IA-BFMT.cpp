@@ -10,6 +10,9 @@
 #include <fstream>
 #include <ompl/base/spaces/RealVectorStateSpace.h>
 
+// unvisited set: nodes that not been added to the trees yet
+// open set: vertices that have been added to the trees, and at the front line for expansion
+// close set: vertices that have been added to the trees and would never considered for expansion
 namespace ompl
 {
    namespace geometric
@@ -53,7 +56,7 @@ namespace ompl
            addPlannerProgressProperty("extendFMT times INTEGER", [this]
                                       {
                                           return std::to_string(numExtend());
-                                      });//引号里面不能有特殊字符，如＊号
+                                      });//*
            addPlannerProgressProperty("iteration times INTEGER", [this]
                                       {
                                           return std::to_string(numIterTimes());
@@ -286,7 +289,7 @@ namespace ompl
            else
            {
                base::InformedSamplerPtr infSampler_; // infomed采样器，单点采样
-               infSampler_.reset();  // informed 采样重置
+               infSampler_.reset();  // reset informed sampler
                if (static_cast<bool>(opt_) == true)
                {
                    if (opt_->hasCostToGoHeuristic() == false)
@@ -628,7 +631,7 @@ namespace ompl
 //               }
 //           }
        }
-
+// expansion function
        void BFMT::improvedExpandTreeFromNode(BiDirMotion *&z, BiDirMotion *&connection_point)
        {
            // Define Opennew and set it to NULL
@@ -786,30 +789,30 @@ namespace ompl
 
                //modify begin
                if((connection_point!=nullptr) && (x->getCurrentSet() == BiDirMotion::SET_CLOSED))
-      //        if (x->getSetType() == Motion::SET_CLOSED) // 优化解
+      //        if (x->getSetType() == Motion::SET_CLOSED)
               {
-                  std::vector<BiDirMotion *> hNear; // 令x点附近的Open属性并且不与x同父节点的点为h集合
-                  hNear.reserve(xNeighborhoodSize); // 开辟内存
-                  std::vector<base::Cost> costs; // h集合中每点重新布线，以x为父节点后的cost
-                  std::vector<base::Cost> incCosts; // x到h点的cost
-                  std::vector<std::size_t> sortedCostIndices; // 将重布线后的h各点按照cost从小到大排序后对应的索引值，如原先索引值1、2、3对应motion1、motion2、motion3,排序后索引1、2、3读应motion2、3、1
-                  CostIndexCompare compareFn(costs, *opt_); // 按照cost值比较大小，用于motion以cots值重排序
+                  std::vector<BiDirMotion *> hNear; // save all vertices near x that in open set
+                  hNear.reserve(xNeighborhoodSize); // 
+                  std::vector<base::Cost> costs; //save all rewire costs through x for vertices in hNear
+                  std::vector<base::Cost> incCosts; // save straight line cost of x to h in hNear
+                  std::vector<std::size_t> sortedCostIndices; // sorted indices
+                  CostIndexCompare compareFn(costs, *opt_); // 
 
-                  for (unsigned int i = 0; i < xNeighborhoodSize; ++i) // 遍历x附近所有点
+                  for (unsigned int i = 0; i < xNeighborhoodSize; ++i) // 
                   {
                       if ( (xNeighborhood[i]->getCurrentSet() == BiDirMotion::SET_OPEN)
-                           && ( xNeighborhood[i]->getParent() != x->getParent() ) ) // 从中找到属性为open的点并且与x不是同一个父节点的点
+                           && ( xNeighborhood[i]->getParent() != x->getParent() ) ) // exclued vertex that share same parents with x
                       {
                           hNear.push_back(xNeighborhood[i]);
                       }
                   }
-                  if (costs.size() < hNear.size()) // 开辟内存
+                  if (costs.size() < hNear.size()) // expand vector size
                   {
                       costs.resize(hNear.size());
                       incCosts.resize(hNear.size());
                       sortedCostIndices.resize(hNear.size());
                   }
-                  for (unsigned int i = 0; i < hNear.size(); ++i) // 遍历h集合，计算以x为父节点的h节点cost值
+                  for (unsigned int i = 0; i < hNear.size(); ++i) // calculate all costs of hNear go through x
                   {
                       incCosts[i] = opt_->motionCost(x->getState(), hNear[i]->getState());
                       costs[i] = opt_->combineCosts(x->getCost(), incCosts[i]);
@@ -820,44 +823,44 @@ namespace ompl
                   }
                   std::sort(sortedCostIndices.begin(), sortedCostIndices.begin() + hNear.size(), compareFn); // hNear容器中向量和costs容器中向量顺序不变，sortedCostIndices容器中的关联索引i改变，i以重布线后的h集合cost值排序，即原sortedCostIndices[1] = 1、sortedCostIndices[2] = 2、sortedCostIndices[3] = 3,排序后sortedCostIndices[1] = 2、sortedCostIndices[2] = 3、sortedCostIndices[3] = 1,231分别值hNear容器中向量和costs容器中向量索引
                   for (std::vector<std::size_t>::const_iterator i = sortedCostIndices.begin();
-                       i != sortedCostIndices.begin() + hNear.size(); ++i) // 遍历索引，重布线cost从小到达依次遍历h
+                       i != sortedCostIndices.begin() + hNear.size(); ++i) // check every vertex in hNear with cost order
                   {
-                      if (opt_->isCostBetterThan(costs[*i], hNear[*i]->getCost())) // 如果重布线后h的cost值好于原h的cost值，则实施碰撞检测和实际重布线
+                      if (opt_->isCostBetterThan(costs[*i], hNear[*i]->getCost())) // if rewire could improve costs, execute collision checks 
                       {
-                          BiDirMotion *hhNear = hNear[*i]; // 实际重布线hh
+                          BiDirMotion *hhNear = hNear[*i]; // vertex that considered for rewiring
                           bool collision_free = false;
-                          if (cacheCC_) // 如果碰撞检测缓存标志为真
+                          if (cacheCC_) // cacheCC 
                           {
                               if (!x->alreadyCC(hhNear)) // 如果x与其最优父节点没进行过碰撞检测
                               {
-                                  collision_free = si_->checkMotion(hhNear->getState(), x->getState()); // 进行碰撞检测
-                                  ++collisionChecks_; // 碰撞次数计数
+                                  collision_free = si_->checkMotion(hhNear->getState(), x->getState()); // CC
+                                  ++collisionChecks_; // count collision checks
                                   // Due to FMT* design, it is only necessary to save unsuccesful
                                   // connection attemps because of collision
-                                  if (!collision_free) // 如果x与其最优open父节点有碰撞
-                                      x->addCC(hhNear); // 缓存碰撞失败的连接
+                                  if (!collision_free) // 
+                                      x->addCC(hhNear); // cache CC results
                               }
                           }
-                          else // 碰撞检测缓存标志为假
+                          else // normal version
                           {
-                              ++collisionChecks_; // 碰撞检测计数
-                              collision_free = si_->checkMotion(hhNear->getState(), x->getState()); // 碰撞检测
+                              ++collisionChecks_; 
+                              collision_free = si_->checkMotion(hhNear->getState(), x->getState()); 
                           }
 
-                          if (collision_free) // 如果无碰撞
-                          {  // 将实际重布线的hh点从hh父节点的字节点容器中删除hh节点
+                          if (collision_free) // if collision-free, execute rewire
+                          {  // remove hh from hh's parent's children list
                               std::vector<BiDirMotion*>::iterator iter = std::find(hhNear->getParent()->getChildren().begin()
                                                                               ,hhNear->getParent()->getChildren().end()
                                                                               ,hhNear);
-                              //vector< int >::iterator iter=std::find(v.begin(),v.end(),num_to_find); //返回的是一个迭代器指针
-                              if(iter != hhNear->getParent()->getChildren().end())//如果能找到hhNear，则在hhNear->getParent()->getChildren()里删除hhNear
+                              //vector< int >::iterator iter=std::find(v.begin(),v.end(),num_to_find); 
+                              if(iter != hhNear->getParent()->getChildren().end())//if hhNear is found，delete hhNear from hhNear->getParent()->getChildren()
                               {
                                   hhNear->getParent()->getChildren().erase(iter);
                               }
-                              hhNear->setParent(x); // 设定x父节点为最优父节点
-                              hhNear->setCost(costs[*i]); // 设定重布线后cost值
-                              x->getChildren().push_back(hhNear); // 将h加入x父节点的子节点集合
-                              updateChildCosts(hhNear); // 修改hh节点之后所有字节点及其衍生字节点的cost值
+                              hhNear->setParent(x); // set x as hhNear's new parent
+                              hhNear->setCost(costs[*i]); // set new connection costs for hhNear
+                              x->getChildren().push_back(hhNear); // put hhNear to x's children list
+                              updateChildCosts(hhNear); // update cost for every child nodes of hhNear
                           }
                       }
                   }
@@ -878,7 +881,7 @@ namespace ompl
                i->setCurrentSet(BiDirMotion::SET_OPEN);
            }
        }
-
+// plan function
        bool BFMT::plan(BiDirMotion *x_init, BiDirMotion *x_goal, BiDirMotion *&connection_point,
                        const base::PlannerTerminationCondition &ptc)
        {
@@ -887,7 +890,7 @@ namespace ompl
            bool success = false;
            int i = 1;
            int in = 1;
-//           base::Cost costThreshold(1660); // 设定cost阈值，解的cost值小于1800则中断计算
+//           base::Cost costThreshold(1660); // set path length optimization threshold
 //           opt_->setCostThreshold(costThreshold);
            bool sufficientlyShort = false;
            bool firstSuccessful_ = false;
@@ -960,10 +963,10 @@ namespace ompl
                        OMPL_DEBUG("first path cost: %f", lastCost_.value());
                        iterationcost_ = lastCost_;
                        ++iterTimes_;
-//                       drawPathe();//绘制最终路径modify
+//                       drawPathe();//
                    }
 
-                   else//实现批量ｅｘｔｅｎｄ采点
+                   else// dynamic insert new samples to find a inital path
                    {
                        if (Open_[tree_].empty())  // If this heap is empty...
                        {
@@ -994,7 +997,7 @@ namespace ompl
                 Open_elements[FWD].clear();
                 Open_elements[REV].clear();
                 neighborhoods_.clear();
-                BiDirMotion *z; // 设定搜索点
+                BiDirMotion *z; // expansion node
                 bool improvesucess = false;
                 useFwdTree();
 //                                    useRevTree();
@@ -1005,13 +1008,13 @@ namespace ompl
 
                 int ii = 1;
                 std::vector<BiDirMotion *> allMotions;
-                nn_->list(allMotions); // 将所有数据存入allMotions中
+                nn_->list(allMotions); // save all vertices to allMotions
                 nn_->clear();
-                for (BiDirMotion *everyMotion : allMotions) // 遍历所有点数据
+                for (BiDirMotion *everyMotion : allMotions) 
                 {
                     base::Cost solutionHeuristic;
                     if (ii != 1)
-                    { // 计算从起点过motion点到目标点的最小cost值
+                    { // calculate heuristic cost of every motion solutionHeuristic
                         base::Cost costToCome;
 
                         // Start with infinite cost
@@ -1026,13 +1029,13 @@ namespace ompl
                         solutionHeuristic = opt_->combineCosts(costToCome, costToGo);            // add the two costs
                     }
 
-
+// set start vertex for searching
                     if (ii == 1)
-                    { // 设定搜索起始点
+                    { 
                         Open_elements[FWD][everyMotion] = Open_[FWD].insert(everyMotion);
                         everyMotion->currentSet_[FWD] = BiDirMotion::SET_OPEN;
 //                             z = everyMotion;  // z <-- xinit
-                        nn_->add(everyMotion); // 将数据添加到树中
+                        nn_->add(everyMotion); // add start vertex to nn_ structure
                     }
                     else
                     {
@@ -1059,7 +1062,7 @@ namespace ompl
                 }
                  ++iterTimes_;
 
-                setBatchNumSamples(improvN); // 设定采样点
+                setBatchNumSamples(improvN); // set sample counts of every batch
 //                std::cout<<"batch samples: "<< batchnumSamples_ << "nnsize: "<< nn_->size()<<std::endl;
                 if (sampler_)
                     sampler_.reset();
@@ -1113,7 +1116,7 @@ namespace ompl
 //                 nn_->add(x_goal);  // S <-- {x_goal}
 
                     // Take the first valid goal state as the reverse tree root
-                    Open_elements[REV][x_goal] = Open_[REV].insert(x_goal);//这里必须添加ｘ_goal，因为没有ｐａｒｅｎｔ
+                    Open_elements[REV][x_goal] = Open_[REV].insert(x_goal);//x_goal have to be added, since it does not have a parent
 //                    x_goal->currentSet_[REV] = BiDirMotion::SET_OPEN;
                     x_goal->cost_[REV] = opt_->terminalCost(x_goal->getState());
                     heurGoalState_[0] = x_goal->getState();
@@ -1128,7 +1131,7 @@ namespace ompl
                     traceSolutionPathThroughTree(connection_point);
 //                    drawPathe();//单点绘制modify
                     sufficientlyShort = opt_->isSatisfied(lastCost_);
-                    if ( (lastMotionCostValue - lastCost_.value()) >0)/*当优化值大于1是输出结果*/
+                    if ( (lastMotionCostValue - lastCost_.value()) > 0)/*update cost if better solution is found*/
                     {  // draw pic 画图，并实时追踪改变的求解路径
                         lastMotionCostValue = lastCost_.value();
 //                            traceSolutionPathThroughTree(connection_point);
@@ -1169,7 +1172,7 @@ namespace ompl
                earlyFailure = false;
                return earlyFailure;
        }
-
+ // iteration
        void ompl::geometric::BFMT::updateChildCosts(BiDirMotion *m)
        {
            for (unsigned int i = 0; i < m->getChildren().size(); ++i)
@@ -1177,10 +1180,10 @@ namespace ompl
                base::Cost incCost;
                incCost = opt_->motionCost(m->getState(), m->getChildren()[i]->getState());
                m->getChildren()[i]->setCost(opt_->combineCosts(m->getCost(), incCost));
-               updateChildCosts(m->getChildren()[i]); // 递归调用，将m的所有子节点及其子节点的子节点的代价值进行更新
+               updateChildCosts(m->getChildren()[i]);
            }
        }
-
+// Animate the algorithm process with openCV library
 //       void ompl::geometric::BFMT::drawPathe()
 //       {
 //           if(tree_==FWD)
@@ -1313,6 +1316,7 @@ namespace ompl
 //       }
 //       }
 
+// insert one sample to the open set
        void BFMT::insertNewSampleInOpen(const base::PlannerTerminationCondition &ptc)
        {
            // Sample and connect samples to tree only if there is
